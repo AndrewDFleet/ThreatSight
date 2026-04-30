@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+test_report.md
+nids.db
+debug_key.py
+.claude/

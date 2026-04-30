@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThreatSight</title>
+<style>
+  :root {
+    --bg:       #0a0e1a;
+    --surface:  #111827;
+    --border:   #1e293b;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --green:    #22c55e;
+    --blue:     #3b82f6;
+    --yellow:   #eab308;
+    --orange:   #f97316;
+    --red:      #ef4444;
+    --critical: #dc2626;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 13px; min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo { font-size: 15px; font-weight: 700; letter-spacing: 0.1em; color: var(--green); }
+  .logo span { color: var(--muted); }
+  .header-right { display: flex; align-items: center; gap: 1.5rem; }
+  .mode-badge {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .mode-demo { background: rgba(234,179,8,.15); color: var(--yellow); border: 1px solid rgba(234,179,8,.3); }
+  .mode-live { background: rgba(34,197,94,.15); color: var(--green); border: 1px solid rgba(34,197,94,.3); }
+  .ws-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+  .dot.connected { background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .uptime { color: var(--muted); font-size: 11px; }
+
+  /* ── Stat Cards ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-card {
+    background: var(--surface);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .stat-label { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  .stat-value { font-size: 22px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .stat-value.critical { color: var(--critical); }
+  .stat-value.high     { color: var(--red); }
+  .stat-value.medium   { color: var(--orange); }
+  .stat-value.low      { color: var(--blue); }
+  .stat-value.green    { color: var(--green); }
+
+  /* ── Main Layout ── */
+  .main { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - 52px - 66px); }
+
+  /* ── Alert Feed ── */
+  .panel { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .panel-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .alert-list { overflow-y: auto; flex: 1; }
+  .alert-list::-webkit-scrollbar { width: 4px; }
+  .alert-list::-webkit-scrollbar-track { background: var(--bg); }
+  .alert-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .alert-item {
+    border-left: 3px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: background .15s;
+    animation: slideIn .3s ease;
+  }
+  .alert-item:hover { background: rgba(255,255,255,.03); }
+  @keyframes slideIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+
+  .alert-item.critical { border-left-color: var(--critical); }
+  .alert-item.high     { border-left-color: var(--red); }
+  .alert-item.medium   { border-left-color: var(--orange); }
+  .alert-item.low      { border-left-color: var(--blue); }
+
+  .alert-row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .severity-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+  }
+  .badge-critical { background: rgba(220,38,38,.2);  color: var(--critical); }
+  .badge-high     { background: rgba(239,68,68,.2);  color: var(--red); }
+  .badge-medium   { background: rgba(249,115,22,.2); color: var(--orange); }
+  .badge-low      { background: rgba(59,130,246,.2); color: var(--blue); }
+
+  .alert-type { font-weight: 600; font-size: 12px; flex: 1; }
+  .alert-time { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+  .alert-desc { font-size: 11px; color: var(--muted); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .alert-ips  { font-size: 10px; color: var(--muted); display: flex; gap: 12px; }
+  .ai-row { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); min-height: 20px; }
+  .ai-pending { color: var(--muted); font-size: 10px; display: flex; align-items: center; gap: 6px; }
+  .spinner { width: 10px; height: 10px; border: 1.5px solid var(--muted); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ai-result { font-size: 10px; }
+  .ai-priority { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 700; margin-right: 6px; }
+  .priority-immediate { background: rgba(220,38,38,.2); color: var(--critical); }
+  .priority-high      { background: rgba(239,68,68,.2); color: var(--red); }
+  .priority-medium    { background: rgba(249,115,22,.2); color: var(--orange); }
+  .priority-low       { background: rgba(59,130,246,.2); color: var(--blue); }
+  .ai-assessment { color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* ── Right Panel ── */
+  .right-panel { display: flex; flex-direction: column; gap: 0; overflow: hidden; }
+  .sub-panel { border-bottom: 1px solid var(--border); padding: 12px 14px; background: var(--surface); }
+  .sub-panel:last-child { flex: 1; overflow-y: auto; }
+  .sub-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 10px; }
+
+  .sev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .sev-card { padding: 8px 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+  .sev-critical { background: rgba(220,38,38,.1); border: 1px solid rgba(220,38,38,.2); }
+  .sev-high     { background: rgba(239,68,68,.1);  border: 1px solid rgba(239,68,68,.2); }
+  .sev-medium   { background: rgba(249,115,22,.1); border: 1px solid rgba(249,115,22,.2); }
+  .sev-low      { background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.2); }
+  .sev-label { font-size: 10px; font-weight: 600; }
+  .sev-count { font-size: 20px; font-weight: 700; }
+
+  .proto-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .proto-row:last-child { border-bottom: none; }
+  .proto-bar-wrap { flex: 1; margin: 0 10px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .proto-bar { height: 100%; background: var(--blue); border-radius: 2px; transition: width .5s ease; }
+  .proto-count { font-size: 10px; color: var(--muted); min-width: 32px; text-align: right; }
+
+  .talker-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+  .talker-row:last-child { border-bottom: none; }
+  .talker-ip { color: var(--text); font-family: monospace; }
+  .talker-cnt { color: var(--muted); }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 12px; }
+  .empty-icon { font-size: 28px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">THREAT<span>/</span>SIGHT</div>
+  <div class="header-right">
+    <div class="ws-status">
+      <div class="dot" id="wsDot"></div>
+      <span id="wsLabel">Connecting…</span>
+    </div>
+    <div class="mode-badge mode-demo" id="modeBadge">DEMO</div>
+    <div class="uptime" id="uptime">00:00:00</div>
+  </div>
+</header>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">Packets/sec</div>
+    <div class="stat-value green" id="sPps">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Packets</div>
+    <div class="stat-value" id="sPkts">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Alerts</div>
+    <div class="stat-value" id="sAlerts">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Active Flows</div>
+    <div class="stat-value" id="sFlows">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Unique IPs</div>
+    <div class="stat-value" id="sIps">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">WS Clients</div>
+    <div class="stat-value" id="sClients">1</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="panel">
+    <div class="panel-header">
+      <span>Live Alert Feed</span>
+      <span id="alertCount" style="color:var(--text)">0 alerts</span>
+    </div>
+    <div class="alert-list" id="alertList">
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <div>Monitoring network traffic…</div>
+        <div style="margin-top:6px;font-size:10px">Alerts will appear here when threats are detected</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="sub-panel">
+      <div class="sub-title">Alerts by Severity</div>
+      <div class="sev-grid">
+        <div class="sev-card sev-critical">
+          <span class="sev-label" style="color:var(--critical)">CRITICAL</span>
+          <span class="sev-count" style="color:var(--critical)" id="cCritical">0</span>
+        </div>
+        <div class="sev-card sev-high">
+          <span class="sev-label" style="color:var(--red)">HIGH</span>
+          <span class="sev-count" style="color:var(--red)" id="cHigh">0</span>
+        </div>
+        <div class="sev-card sev-medium">
+          <span class="sev-label" style="color:var(--orange)">MEDIUM</span>
+          <span class="sev-count" style="color:var(--orange)" id="cMedium">0</span>
+        </div>
+        <div class="sev-card sev-low">
+          <span class="sev-label" style="color:var(--blue)">LOW</span>
+          <span class="sev-count" style="color:var(--blue)" id="cLow">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel">
+      <div class="sub-title">Protocol Distribution</div>
+      <div id="protoList"><div style="color:var(--muted);font-size:11px">Waiting for traffic…</div></div>
+    </div>
+
+    <div class="sub-panel">
+      <div class="sub-title">Top Talkers</div>
+      <div id="talkerList"><div style="color:var(--muted);font-size:11px">No data yet</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WS_URL = `ws://${location.host}/ws`;
+let alertCount = 0;
+let sevCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+let uptimeSeconds = 0;
+let uptimeTimer = null;
+
+// ── WebSocket ──
+let ws, reconnectTimer;
+
+function connect() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    document.getElementById('wsDot').classList.add('connected');
+    document.getElementById('wsLabel').textContent = 'Connected';
+    clearTimeout(reconnectTimer);
+  };
+
+  ws.onclose = () => {
+    document.getElementById('wsDot').classList.remove('connected');
+    document.getElementById('wsLabel').textContent = 'Reconnecting…';
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'alert')    handleAlert(msg.data);
+    if (msg.type === 'stats')    handleStats(msg.data);
+    if (msg.type === 'analysis') handleAnalysis(msg.data);
+  };
+}
+
+// ── Alert handler ──
+function handleAlert(d) {
+  alertCount++;
+  sevCounts[d.severity] = (sevCounts[d.severity] || 0) + 1;
+
+  document.getElementById('alertCount').textContent = `${alertCount} alert${alertCount !== 1 ? 's' : ''}`;
+  document.getElementById('sAlerts').textContent = alertCount;
+  document.getElementById('cCritical').textContent = sevCounts.critical || 0;
+  document.getElementById('cHigh').textContent     = sevCounts.high || 0;
+  document.getElementById('cMedium').textContent   = sevCounts.medium || 0;
+  document.getElementById('cLow').textContent      = sevCounts.low || 0;
+
+  const list = document.getElementById('alertList');
+  const empty = list.querySelector('.empty-state');
+  if (empty) empty.remove();
+
+  const el = document.createElement('div');
+  el.className = `alert-item ${d.severity}`;
+  el.id = `alert-${d.alert_id}`;
+  el.innerHTML = `
+    <div class="alert-row1">
+      <span class="severity-badge badge-${d.severity}">${d.severity.toUpperCase()}</span>
+      <span class="alert-type">${fmt_type(d.alert_type)}</span>
+      <span class="alert-time">${fmt_time(d.timestamp)}</span>
+    </div>
+    <div class="alert-desc">${d.description || '—'}</div>
+    <div class="alert-ips">
+      ${d.source_ip ? `<span>SRC: ${d.source_ip}</span>` : ''}
+      ${d.destination_ip ? `<span>DST: ${d.destination_ip}</span>` : ''}
+      ${d.port ? `<span>PORT: ${d.port}</span>` : ''}
+    </div>
+    <div class="ai-row" id="ai-${d.alert_id}">
+      <div class="ai-pending"><div class="spinner"></div> Analyzing with Claude…</div>
+    </div>`;
+  list.insertBefore(el, list.firstChild);
+}
+
+// ── Analysis handler ──
+function handleAnalysis(d) {
+  const el = document.getElementById(`ai-${d.alert_id}`);
+  if (!el) return;
+  const fp = d.false_positive_likelihood ? ` · FP: ${d.false_positive_likelihood}` : '';
+  el.innerHTML = `
+    <div class="ai-result">
+      <span class="ai-priority priority-${d.priority}">${d.priority.toUpperCase()}</span>
+      <span class="ai-assessment">${d.threat_assessment || ''}${fp}</span>
+    </div>`;
+}
+
+// ── Stats handler ──
+function handleStats(d) {
+  document.getElementById('sPps').textContent   = d.packets_per_second ?? 0;
+  document.getElementById('sPkts').textContent  = fmt_num(d.total_packets);
+  document.getElementById('sAlerts').textContent = d.total_alerts ?? alertCount;
+  document.getElementById('sFlows').textContent  = d.active_flows ?? 0;
+  document.getElementById('sIps').textContent    = d.unique_src_ips ?? 0;
+
+  if (d.uptime_seconds !== undefined) {
+    uptimeSeconds = d.uptime_seconds;
+    document.getElementById('uptime').textContent = fmt_uptime(uptimeSeconds);
+  }
+
+  if (d.mode) {
+    const badge = document.getElementById('modeBadge');
+    badge.textContent = d.mode === 'live' ? 'LIVE' : 'DEMO';
+    badge.className = `mode-badge ${d.mode === 'live' ? 'mode-live' : 'mode-demo'}`;
+  }
+
+  if (d.protocol_distribution) renderProtos(d.protocol_distribution);
+  if (d.top_talkers)           renderTalkers(d.top_talkers);
+}
+
+function renderProtos(dist) {
+  const total = Object.values(dist).reduce((a, b) => a + b, 0) || 1;
+  const sorted = Object.entries(dist).sort((a, b) => b[1] - a[1]);
+  document.getElementById('protoList').innerHTML = sorted.map(([proto, cnt]) => `
+    <div class="proto-row">
+      <span style="min-width:42px;font-size:10px">${proto}</span>
+      <div class="proto-bar-wrap"><div class="proto-bar" style="width:${(cnt/total*100).toFixed(1)}%"></div></div>
+      <span class="proto-count">${cnt}</span>
+    </div>`).join('');
+}
+
+function renderTalkers(talkers) {
+  if (!talkers.length) return;
+  document.getElementById('talkerList').innerHTML = talkers.map(([ip, cnt]) => `
+    <div class="talker-row">
+      <span class="talker-ip">${ip}</span>
+      <span class="talker-cnt">${cnt} pkts</span>
+    </div>`).join('');
+}
+
+// ── Helpers ──
+function fmt_type(t) { return (t || '').replace(/_/g, ' '); }
+function fmt_num(n)  { return (n ?? 0).toLocaleString(); }
+function fmt_time(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function fmt_uptime(s) {
+  const h = String(Math.floor(s / 3600)).padStart(2, '0');
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const sec = String(s % 60).padStart(2, '0');
+  return `${h}:${m}:${sec}`;
+}
+
+connect();
+</script>
+</body>
+</html>
