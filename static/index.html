@@ -171,6 +171,145 @@
 
   .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 12px; }
   .empty-icon { font-size: 28px; margin-bottom: 10px; }
+
+  /* ── Modal Backdrop ── */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.7);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal-backdrop.open { display: flex; animation: fadeIn .2s ease; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+  /* ── Modal Card ── */
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: slideUp .2s ease;
+    box-shadow: 0 25px 60px rgba(0,0,0,.6);
+  }
+  @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+  .modal::-webkit-scrollbar { width: 4px; }
+  .modal::-webkit-scrollbar-track { background: var(--bg); }
+  .modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 1;
+  }
+  .modal-title { flex: 1; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  .modal-close {
+    width: 28px; height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  .modal-close:hover { border-color: var(--text); color: var(--text); }
+
+  .modal-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .modal-section:last-child { border-bottom: none; }
+  .modal-section-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .meta-item { display: flex; flex-direction: column; gap: 3px; }
+  .meta-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .meta-value { font-size: 12px; color: var(--text); font-family: monospace; }
+
+  .ai-loading { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+  .ai-block { display: flex; flex-direction: column; gap: 12px; }
+  .ai-field-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 4px; }
+  .ai-field-value { font-size: 12px; color: var(--text); line-height: 1.6; }
+
+  .actions-list { display: flex; flex-direction: column; gap: 8px; }
+  .action-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 8px 10px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .action-num {
+    min-width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .fp-row { display: flex; align-items: center; gap: 10px; }
+  .fp-badge {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .fp-low    { background: rgba(34,197,94,.15);  color: var(--green); }
+  .fp-medium { background: rgba(249,115,22,.15); color: var(--orange); }
+  .fp-high   { background: rgba(239,68,68,.15);  color: var(--red); }
+
+  .modal-footer {
+    padding: 14px 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    bottom: 0;
+  }
+  .btn {
+    padding: 7px 16px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    font-family: inherit;
+    transition: all .15s;
+  }
+  .btn-ghost { background: none; color: var(--muted); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text); }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-success { background: rgba(34,197,94,.15); color: var(--green); border-color: rgba(34,197,94,.3); }
+  .btn-success:hover { background: rgba(34,197,94,.25); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -264,12 +403,68 @@
   </div>
 </div>
 
+<!-- ── Alert Detail Modal ── -->
+<div class="modal-backdrop" id="modalBackdrop" onclick="if(event.target===this)closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="severity-badge" id="modal-severity"></span>
+      <span class="modal-title" id="modal-type"></span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-title">Alert Details</div>
+      <div class="meta-grid">
+        <div class="meta-item">
+          <span class="meta-label">Alert ID</span>
+          <span class="meta-value" id="modal-alert-id"></span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Timestamp</span>
+          <span class="meta-value" id="modal-time"></span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Source IP</span>
+          <span class="meta-value" id="modal-src"></span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Destination IP</span>
+          <span class="meta-value" id="modal-dst"></span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Port</span>
+          <span class="meta-value" id="modal-port"></span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Description</span>
+          <span class="meta-value" id="modal-desc"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-title">AI Threat Analysis — Claude</div>
+      <div id="modal-ai">
+        <div class="ai-loading"><div class="spinner"></div> Waiting for analysis…</div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      <button class="btn btn-success" id="modal-ack-btn" onclick="acknowledgeAlert()">Acknowledge Alert</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const WS_URL = `ws://${location.host}/ws`;
 let alertCount = 0;
 let sevCounts = { critical: 0, high: 0, medium: 0, low: 0 };
 let uptimeSeconds = 0;
 let uptimeTimer = null;
+
+const alertStore   = new Map(); // alert_id → alert data
+const analysisStore = new Map(); // alert_id → analysis data
 
 // ── WebSocket ──
 let ws, reconnectTimer;
@@ -309,6 +504,8 @@ function handleAlert(d) {
   document.getElementById('cMedium').textContent   = sevCounts.medium || 0;
   document.getElementById('cLow').textContent      = sevCounts.low || 0;
 
+  alertStore.set(d.alert_id, d);
+
   const list = document.getElementById('alertList');
   const empty = list.querySelector('.empty-state');
   if (empty) empty.remove();
@@ -316,6 +513,7 @@ function handleAlert(d) {
   const el = document.createElement('div');
   el.className = `alert-item ${d.severity}`;
   el.id = `alert-${d.alert_id}`;
+  el.addEventListener('click', () => openModal(d.alert_id));
   el.innerHTML = `
     <div class="alert-row1">
       <span class="severity-badge badge-${d.severity}">${d.severity.toUpperCase()}</span>
@@ -336,14 +534,22 @@ function handleAlert(d) {
 
 // ── Analysis handler ──
 function handleAnalysis(d) {
+  analysisStore.set(d.alert_id, d);
+
   const el = document.getElementById(`ai-${d.alert_id}`);
-  if (!el) return;
-  const fp = d.false_positive_likelihood ? ` · FP: ${d.false_positive_likelihood}` : '';
-  el.innerHTML = `
-    <div class="ai-result">
-      <span class="ai-priority priority-${d.priority}">${d.priority.toUpperCase()}</span>
-      <span class="ai-assessment">${d.threat_assessment || ''}${fp}</span>
-    </div>`;
+  if (el) {
+    const fp = d.false_positive_likelihood ? ` · FP: ${d.false_positive_likelihood}` : '';
+    el.innerHTML = `
+      <div class="ai-result">
+        <span class="ai-priority priority-${d.priority}">${d.priority.toUpperCase()}</span>
+        <span class="ai-assessment">${d.threat_assessment || ''}${fp}</span>
+      </div>`;
+  }
+
+  // Update modal if it's open on this alert
+  if (document.getElementById('modal-alert-id')?.textContent === d.alert_id) {
+    renderModalAI(d);
+  }
 }
 
 // ── Stats handler ──
@@ -403,6 +609,88 @@ function fmt_uptime(s) {
   const sec = String(s % 60).padStart(2, '0');
   return `${h}:${m}:${sec}`;
 }
+
+// ── Modal ──
+function openModal(alertId) {
+  const alert = alertStore.get(alertId);
+  if (!alert) return;
+  const analysis = analysisStore.get(alertId);
+
+  document.getElementById('modal-severity').className = `severity-badge badge-${alert.severity}`;
+  document.getElementById('modal-severity').textContent = alert.severity.toUpperCase();
+  document.getElementById('modal-type').textContent = fmt_type(alert.alert_type);
+  document.getElementById('modal-alert-id').textContent = alert.alert_id;
+  document.getElementById('modal-time').textContent = fmt_time(alert.timestamp);
+  document.getElementById('modal-src').textContent   = alert.source_ip      || '—';
+  document.getElementById('modal-dst').textContent   = alert.destination_ip || '—';
+  document.getElementById('modal-port').textContent  = alert.port           || '—';
+  document.getElementById('modal-desc').textContent  = alert.description    || '—';
+  document.getElementById('modal-ack-btn').disabled  = !!alert.acknowledged;
+  document.getElementById('modal-ack-btn').textContent = alert.acknowledged ? '✓ Acknowledged' : 'Acknowledge Alert';
+
+  if (analysis) {
+    renderModalAI(analysis);
+  } else {
+    document.getElementById('modal-ai').innerHTML = `
+      <div class="ai-loading"><div class="spinner"></div> Claude is analyzing this threat…</div>`;
+  }
+
+  document.getElementById('modalBackdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function renderModalAI(d) {
+  const actions = (d.recommended_actions || []).map((a, i) => `
+    <div class="action-item">
+      <span class="action-num">${i + 1}</span>
+      <span>${a}</span>
+    </div>`).join('');
+
+  const fpClass = { low: 'fp-low', medium: 'fp-medium', high: 'fp-high' }[d.false_positive_likelihood] || 'fp-medium';
+
+  document.getElementById('modal-ai').innerHTML = `
+    <div class="ai-block">
+      <div>
+        <div class="ai-field-label">Threat Assessment</div>
+        <div class="ai-field-value">${d.threat_assessment || '—'}</div>
+      </div>
+      <div>
+        <div class="ai-field-label">Context</div>
+        <div class="ai-field-value">${d.context || '—'}</div>
+      </div>
+      ${actions ? `<div>
+        <div class="ai-field-label">Recommended Actions</div>
+        <div class="actions-list">${actions}</div>
+      </div>` : ''}
+      <div class="fp-row">
+        <div class="ai-field-label" style="margin:0">False Positive Risk</div>
+        <span class="fp-badge ${fpClass}">${(d.false_positive_likelihood || '—').toUpperCase()}</span>
+        <span class="ai-priority priority-${d.priority}" style="margin-left:auto">${(d.priority || '').toUpperCase()}</span>
+      </div>
+    </div>`;
+}
+
+function closeModal() {
+  document.getElementById('modalBackdrop').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+async function acknowledgeAlert() {
+  const alertId = document.getElementById('modal-alert-id').textContent;
+  if (!alertId) return;
+  try {
+    await fetch(`/api/alerts/${alertId}/acknowledge`, { method: 'POST' });
+    const alert = alertStore.get(alertId);
+    if (alert) alert.acknowledged = true;
+    const btn = document.getElementById('modal-ack-btn');
+    btn.textContent = '✓ Acknowledged';
+    btn.disabled = true;
+    const card = document.getElementById(`alert-${alertId}`);
+    if (card) card.style.opacity = '0.5';
+  } catch (e) { console.error(e); }
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 connect();
 </script>
