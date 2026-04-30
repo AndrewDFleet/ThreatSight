@@ -51,6 +51,21 @@
   .dot.connected { background: var(--green); animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
   .uptime { color: var(--muted); font-size: 11px; }
+  .scan-btn {
+    padding: 5px 14px;
+    background: rgba(59,130,246,.15);
+    border: 1px solid rgba(59,130,246,.4);
+    border-radius: 5px;
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all .15s;
+    letter-spacing: .04em;
+  }
+  .scan-btn:hover { background: rgba(59,130,246,.3); border-color: var(--blue); }
+  .scan-btn:disabled { opacity: .4; cursor: not-allowed; }
 
   /* ── Stat Cards ── */
   .stats-row {
@@ -322,6 +337,7 @@
       <span id="wsLabel">Connecting…</span>
     </div>
     <div class="mode-badge mode-demo" id="modeBadge">DEMO</div>
+    <button class="scan-btn" onclick="openScanModal()">⚡ Scan</button>
     <div class="uptime" id="uptime">00:00:00</div>
   </div>
 </header>
@@ -400,6 +416,111 @@
       <div class="sub-title">Top Talkers</div>
       <div id="talkerList"><div style="color:var(--muted);font-size:11px">No data yet</div></div>
     </div>
+  </div>
+</div>
+
+<!-- ── Scan Modal ── -->
+<div class="modal-backdrop" id="scanBackdrop" onclick="if(event.target===this)closeScanModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:520px">
+
+    <!-- Config state -->
+    <div id="scanConfig">
+      <div class="modal-header">
+        <span style="font-size:15px">⚡</span>
+        <span class="modal-title">Network Scan</span>
+        <button class="modal-close" onclick="closeScanModal()">✕</button>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">Target IP</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="scanTarget" type="text" placeholder="e.g. 192.168.1.1"
+            style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:5px;
+                   padding:8px 12px;color:var(--text);font-family:monospace;font-size:13px;outline:none"/>
+          <button class="btn btn-ghost" style="white-space:nowrap;font-size:11px" onclick="loadLocalIp()">
+            Use Gateway
+          </button>
+        </div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">Scan Depth</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+            <input type="radio" name="scanType" value="quick" checked style="margin-top:2px">
+            <div>
+              <div style="font-size:12px;font-weight:600">Quick</div>
+              <div style="font-size:11px;color:var(--muted)">20 common ports — ~5 seconds</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+            <input type="radio" name="scanType" value="standard" style="margin-top:2px">
+            <div>
+              <div style="font-size:12px;font-weight:600">Standard</div>
+              <div style="font-size:11px;color:var(--muted)">40 ports including dev/database services — ~15 seconds</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="modal-section" style="background:rgba(234,179,8,.05);border-color:rgba(234,179,8,.2)">
+        <div style="font-size:11px;color:var(--yellow);display:flex;gap:8px;align-items:flex-start">
+          <span>⚠</span>
+          <span>Active scanning sends connection attempts to the target. Only scan networks you own or have explicit permission to test.</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeScanModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="startScan()">Start Scan ⚡</button>
+      </div>
+    </div>
+
+    <!-- Scanning state -->
+    <div id="scanRunning" style="display:none">
+      <div class="modal-header">
+        <span style="font-size:15px">⚡</span>
+        <span class="modal-title" id="scanRunningTitle">Scanning…</span>
+        <button class="modal-close" onclick="closeScanModal()">✕</button>
+      </div>
+      <div class="modal-section">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px">
+          <span>Progress</span>
+          <span id="scanProgressLabel">0 / 0 ports</span>
+        </div>
+        <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+          <div id="scanProgressBar" style="height:100%;background:var(--blue);width:0%;transition:width .3s ease;border-radius:2px"></div>
+        </div>
+      </div>
+      <div class="modal-section" style="min-height:120px">
+        <div class="modal-section-title">Open Ports</div>
+        <div id="scanLiveResults">
+          <div style="color:var(--muted);font-size:11px">Scanning…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Complete state -->
+    <div id="scanComplete" style="display:none">
+      <div class="modal-header">
+        <span style="font-size:15px">✓</span>
+        <span class="modal-title" id="scanCompleteTitle">Scan Complete</span>
+        <button class="modal-close" onclick="closeScanModal()">✕</button>
+      </div>
+      <div class="modal-section">
+        <div id="scanFinalResults"></div>
+      </div>
+      <div class="modal-section" id="scanAiSection" style="display:none">
+        <div class="modal-section-title">AI Security Assessment — Claude</div>
+        <div id="scanAiContent">
+          <div class="ai-loading"><div class="spinner"></div> Analyzing attack surface…</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="resetScanModal()">New Scan</button>
+        <button class="btn btn-primary" id="scanAnalyzeBtn" onclick="analyzeScan()" style="display:none">
+          Analyze with Claude ⚡
+        </button>
+        <button class="btn btn-ghost" onclick="closeScanModal()">Close</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -486,9 +607,12 @@ function connect() {
 
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
-    if (msg.type === 'alert')    handleAlert(msg.data);
-    if (msg.type === 'stats')    handleStats(msg.data);
-    if (msg.type === 'analysis') handleAnalysis(msg.data);
+    if (msg.type === 'alert')         handleAlert(msg.data);
+    if (msg.type === 'stats')         handleStats(msg.data);
+    if (msg.type === 'analysis')      handleAnalysis(msg.data);
+    if (msg.type === 'scan_progress') handleScanProgress(msg.data);
+    if (msg.type === 'scan_result')   handleScanResult(msg.data);
+    if (msg.type === 'scan_complete') handleScanComplete(msg.data);
   };
 }
 
@@ -609,6 +733,181 @@ function fmt_uptime(s) {
   const sec = String(s % 60).padStart(2, '0');
   return `${h}:${m}:${sec}`;
 }
+
+// ── Scan Modal ──
+let scanOpenPorts = [];
+let scanTarget = '';
+
+async function loadLocalIp() {
+  try {
+    const r = await fetch('/api/scan/local-ip');
+    const d = await r.json();
+    document.getElementById('scanTarget').value = d.gateway || d.local_ip;
+  } catch(e) { console.error(e); }
+}
+
+function openScanModal() {
+  resetScanModal();
+  document.getElementById('scanBackdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  loadLocalIp();
+}
+
+function closeScanModal() {
+  document.getElementById('scanBackdrop').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function resetScanModal() {
+  scanOpenPorts = [];
+  scanTarget = '';
+  document.getElementById('scanConfig').style.display = '';
+  document.getElementById('scanRunning').style.display = 'none';
+  document.getElementById('scanComplete').style.display = 'none';
+  document.getElementById('scanLiveResults').innerHTML = '<div style="color:var(--muted);font-size:11px">Scanning…</div>';
+  document.getElementById('scanProgressBar').style.width = '0%';
+  document.querySelector('.scan-btn').disabled = false;
+}
+
+async function startScan() {
+  const target = document.getElementById('scanTarget').value.trim();
+  if (!target) { alert('Please enter a target IP address.'); return; }
+  const scanType = document.querySelector('input[name="scanType"]:checked').value;
+
+  scanTarget = target;
+  scanOpenPorts = [];
+  document.querySelector('.scan-btn').disabled = true;
+  document.getElementById('scanConfig').style.display = 'none';
+  document.getElementById('scanRunning').style.display = '';
+  document.getElementById('scanRunningTitle').textContent = `Scanning ${target}`;
+
+  try {
+    await fetch('/api/scan/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({target, scan_type: scanType}),
+    });
+  } catch(e) {
+    console.error(e);
+    document.querySelector('.scan-btn').disabled = false;
+    resetScanModal();
+  }
+}
+
+function handleScanProgress(d) {
+  document.getElementById('scanProgressBar').style.width = `${d.pct}%`;
+  document.getElementById('scanProgressLabel').textContent = `${d.done} / ${d.total} ports`;
+}
+
+function handleScanResult(d) {
+  scanOpenPorts.push(d);
+  const riskColor = {low: 'var(--blue)', medium: 'var(--orange)', high: 'var(--red)'}[d.risk] || 'var(--muted)';
+  const el = document.createElement('div');
+  el.style.cssText = 'display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;animation:slideIn .2s ease';
+  el.innerHTML = `
+    <span style="font-family:monospace;min-width:45px">${d.port}</span>
+    <span style="flex:1;color:var(--muted)">${d.service}</span>
+    <span style="color:${riskColor};font-weight:700;font-size:10px">${d.risk.toUpperCase()}</span>`;
+  const container = document.getElementById('scanLiveResults');
+  if (container.querySelector('div[style*="color:var(--muted)"]')) container.innerHTML = '';
+  container.appendChild(el);
+}
+
+function handleScanComplete(d) {
+  document.querySelector('.scan-btn').disabled = false;
+  document.getElementById('scanRunning').style.display = 'none';
+  document.getElementById('scanComplete').style.display = '';
+
+  const count = d.open_count;
+  document.getElementById('scanCompleteTitle').textContent =
+    `${d.target} — ${count} open port${count !== 1 ? 's' : ''} found`;
+
+  if (d.error) {
+    document.getElementById('scanFinalResults').innerHTML =
+      `<div style="color:var(--red);font-size:12px">Error: ${d.error}</div>`;
+    return;
+  }
+
+  if (!count) {
+    document.getElementById('scanFinalResults').innerHTML =
+      `<div style="color:var(--green);font-size:12px">✓ No open ports detected on ${d.target}. Target appears well-hardened.</div>`;
+    return;
+  }
+
+  const rows = (d.open_ports || scanOpenPorts).map(p => {
+    const riskColor = {low: 'var(--blue)', medium: 'var(--orange)', high: 'var(--red)'}[p.risk] || 'var(--muted)';
+    return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <span style="font-family:monospace;min-width:45px">${p.port}</span>
+      <span style="flex:1;color:var(--muted)">${p.service}</span>
+      <span style="color:${riskColor};font-weight:700;font-size:10px">${p.risk.toUpperCase()}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('scanFinalResults').innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">
+      <span>Port</span><span style="flex:1;padding-left:12px">Service</span><span>Risk</span>
+    </div>${rows}`;
+
+  const hasHighRisk = (d.open_ports || scanOpenPorts).some(p => p.risk === 'high');
+  if (hasHighRisk || count > 0) {
+    document.getElementById('scanAnalyzeBtn').style.display = '';
+  }
+}
+
+async function analyzeScan() {
+  const btn = document.getElementById('scanAnalyzeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing…';
+  document.getElementById('scanAiSection').style.display = '';
+  document.getElementById('scanAiContent').innerHTML =
+    '<div class="ai-loading"><div class="spinner"></div> Claude is analyzing the attack surface…</div>';
+
+  try {
+    const r = await fetch('/api/scan/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({target: scanTarget, open_ports: scanOpenPorts}),
+    });
+    const d = await r.json();
+
+    if (d.analysis) {
+      document.getElementById('scanAiContent').innerHTML =
+        `<div class="ai-field-value">${d.analysis}</div>`;
+      return;
+    }
+
+    const riskColor = {low:'var(--blue)',medium:'var(--orange)',high:'var(--red)',critical:'var(--critical)'}[d.overall_risk] || 'var(--muted)';
+    const actions = (d.recommended_actions || []).map((a, i) => `
+      <div class="action-item"><span class="action-num">${i+1}</span><span>${a}</span></div>`).join('');
+
+    document.getElementById('scanAiContent').innerHTML = `
+      <div class="ai-block">
+        <div>
+          <div class="ai-field-label">Assessment</div>
+          <div class="ai-field-value">${d.threat_assessment || '—'}</div>
+        </div>
+        ${d.recommended_actions?.length ? `<div>
+          <div class="ai-field-label">Recommended Actions</div>
+          <div class="actions-list">${actions}</div>
+        </div>` : ''}
+        <div class="fp-row">
+          <div class="ai-field-label" style="margin:0">Overall Risk</div>
+          <span class="fp-badge" style="color:${riskColor};background:${riskColor}22">${(d.overall_risk||'').toUpperCase()}</span>
+        </div>
+      </div>`;
+  } catch(e) {
+    document.getElementById('scanAiContent').innerHTML =
+      `<div style="color:var(--red);font-size:12px">Analysis failed: ${e.message}</div>`;
+  }
+}
+
+// Wire up WebSocket scan message types inside handleStats/handleAlert chain
+const _origWsMessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.type === 'scan_progress') handleScanProgress(msg.data);
+  if (msg.type === 'scan_result')   handleScanResult(msg.data);
+  if (msg.type === 'scan_complete') handleScanComplete(msg.data);
+};
 
 // ── Modal ──
 function openModal(alertId) {

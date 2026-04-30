@@ -1,7 +1,13 @@
+import asyncio
+import json
+import logging
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 from db import queries
 import config
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
@@ -89,3 +95,118 @@ async def generate_report(request: Request):
         None, reporter.generate_report, alerts, dummy_analyses
     )
     return report
+
+
+# ── Scan endpoints ────────────────────────────────────────────────────────────
+
+class ScanRequest(BaseModel):
+    target: str
+    scan_type: str = "quick"  # quick | standard
+
+
+@router.get("/scan/local-ip")
+async def local_ip():
+    from scan.scanner import get_local_ip, get_gateway_ip
+    return {"local_ip": get_local_ip(), "gateway": get_gateway_ip()}
+
+
+@router.post("/scan/start")
+async def start_scan(body: ScanRequest):
+    target = body.target.strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="target is required")
+    asyncio.create_task(_scan_task(target, body.scan_type))
+    return {"status": "started", "target": target, "scan_type": body.scan_type}
+
+
+async def _scan_task(target: str, scan_type: str) -> None:
+    from scan.scanner import run_scan
+    from api.websocket import connection_manager
+
+    async def broadcast(msg: dict) -> None:
+        await connection_manager.broadcast(json.dumps(msg))
+
+    await broadcast({"type": "scan_start", "data": {"target": target, "scan_type": scan_type}})
+
+    async def on_progress(done: int, total: int) -> None:
+        await broadcast({"type": "scan_progress",
+                         "data": {"done": done, "total": total,
+                                  "pct": round(done / total * 100)}})
+
+    async def on_open(result) -> None:
+        await broadcast({"type": "scan_result",
+                         "data": {"ip": result.ip, "port": result.port,
+                                  "service": result.service, "risk": result.risk}})
+
+    summary = await run_scan(target, scan_type, on_progress, on_open)
+
+    await broadcast({
+        "type": "scan_complete",
+        "data": {
+            "target": target,
+            "scan_type": scan_type,
+            "ports_scanned": summary.ports_scanned,
+            "open_count": len(summary.open_ports),
+            "open_ports": [{"port": r.port, "service": r.service, "risk": r.risk}
+                           for r in summary.open_ports],
+            "error": summary.error,
+        },
+    })
+
+
+@router.post("/scan/analyze")
+async def analyze_scan(body: dict):
+    if not config.AI_ENABLED:
+        raise HTTPException(status_code=503, detail="AI analysis is disabled — add ANTHROPIC_API_KEY to .env")
+
+    target = body.get("target", "unknown")
+    open_ports = body.get("open_ports", [])
+
+    if not open_ports:
+        return {"analysis": "No open ports found — target appears well-hardened or offline."}
+
+    port_lines = "\n".join(
+        f"  Port {p['port']} ({p['service']}) — risk: {p['risk']}"
+        for p in open_ports
+    )
+    prompt = (
+        f"I ran a port scan on {target} and found these open ports:\n\n"
+        f"{port_lines}\n\n"
+        "Provide a security assessment of this attack surface in JSON with these fields:\n"
+        '{"threat_assessment": "...", "highest_risk_port": <int>, '
+        '"recommended_actions": ["...", "..."], "overall_risk": "low|medium|high|critical"}'
+    )
+
+    import anthropic
+    from ai import ai_config
+
+    loop = asyncio.get_event_loop()
+
+    def call_claude():
+        client = anthropic.Anthropic(api_key=ai_config.ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model=ai_config.MODEL,
+            max_tokens=1024,
+            thinking={"type": "adaptive"},
+            output_config={"effort": "medium"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        for block in response.content:
+            if block.type == "text":
+                return block.text
+        return ""
+
+    raw = await loop.run_in_executor(None, call_claude)
+
+    text = raw.strip()
+    if "```" in text:
+        lines = text.splitlines()
+        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    if "{" in text and "}" in text:
+        text = text[text.index("{"):text.rindex("}") + 1]
+
+    try:
+        import json as _json
+        return _json.loads(text)
+    except Exception:
+        return {"analysis": raw}
