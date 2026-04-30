@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ThreatSight</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --bg:       #0a0e1a;
@@ -90,8 +91,34 @@
   .stat-value.low      { color: var(--blue); }
   .stat-value.green    { color: var(--green); }
 
+  /* ── Charts Row ── */
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 260px;
+    gap: 0;
+    height: 180px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .chart-panel {
+    padding: 10px 16px 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .chart-panel + .chart-panel { border-left: 1px solid var(--border); }
+  .chart-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+    margin-bottom: 6px;
+    flex-shrink: 0;
+  }
+  .chart-wrap { flex: 1; position: relative; min-height: 0; }
+
   /* ── Main Layout ── */
-  .main { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - 52px - 66px); }
+  .main { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - 52px - 66px - 180px); }
 
   /* ── Alert Feed ── */
   .panel { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
@@ -369,6 +396,17 @@
   </div>
 </div>
 
+<div class="charts-row">
+  <div class="chart-panel">
+    <div class="chart-label">Packets / Second — Live</div>
+    <div class="chart-wrap"><canvas id="ppsChart"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-label">Protocol Mix</div>
+    <div class="chart-wrap"><canvas id="protoChart"></canvas></div>
+  </div>
+</div>
+
 <div class="main">
   <div class="panel">
     <div class="panel-header">
@@ -405,11 +443,6 @@
           <span class="sev-count" style="color:var(--blue)" id="cLow">0</span>
         </div>
       </div>
-    </div>
-
-    <div class="sub-panel">
-      <div class="sub-title">Protocol Distribution</div>
-      <div id="protoList"><div style="color:var(--muted);font-size:11px">Waiting for traffic…</div></div>
     </div>
 
     <div class="sub-panel">
@@ -584,8 +617,90 @@ let sevCounts = { critical: 0, high: 0, medium: 0, low: 0 };
 let uptimeSeconds = 0;
 let uptimeTimer = null;
 
-const alertStore   = new Map(); // alert_id → alert data
-const analysisStore = new Map(); // alert_id → analysis data
+const alertStore    = new Map();
+const analysisStore = new Map();
+
+// ── Chart Setup ──
+const CHART_COLORS = ['#3b82f6','#22c55e','#eab308','#f97316','#ef4444','#8b5cf6','#06b6d4'];
+const MAX_PPS_POINTS = 30;
+const ppsLabels = [];
+const ppsData   = [];
+
+Chart.defaults.color = '#64748b';
+Chart.defaults.font.family = "'JetBrains Mono', 'Courier New', monospace";
+Chart.defaults.font.size = 10;
+
+const ppsChart = new Chart(document.getElementById('ppsChart'), {
+  type: 'line',
+  data: {
+    labels: ppsLabels,
+    datasets: [{
+      data: ppsData,
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59,130,246,0.08)',
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      borderWidth: 2,
+    }],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: 'nearest', intersect: false },
+    scales: {
+      x: { display: false },
+      y: {
+        min: 0,
+        grid: { color: 'rgba(30,41,59,0.6)' },
+        ticks: { maxTicksLimit: 4 },
+      },
+    },
+    plugins: { legend: { display: false }, tooltip: {
+      backgroundColor: '#111827',
+      borderColor: '#1e293b',
+      borderWidth: 1,
+      callbacks: { label: ctx => ` ${ctx.parsed.y} pps` },
+    }},
+  },
+});
+
+const protoChart = new Chart(document.getElementById('protoChart'), {
+  type: 'doughnut',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: CHART_COLORS, borderWidth: 0, hoverOffset: 4 }] },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: {
+      legend: {
+        position: 'right',
+        labels: { padding: 10, boxWidth: 10, color: '#94a3b8' },
+      },
+      tooltip: {
+        backgroundColor: '#111827',
+        borderColor: '#1e293b',
+        borderWidth: 1,
+      },
+    },
+  },
+});
+
+function pushPpsPoint(pps) {
+  const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  ppsLabels.push(now);
+  ppsData.push(pps);
+  if (ppsLabels.length > MAX_PPS_POINTS) { ppsLabels.shift(); ppsData.shift(); }
+  ppsChart.update('none');
+}
+
+function updateProtoChart(dist) {
+  const entries = Object.entries(dist).sort((a,b) => b[1]-a[1]);
+  protoChart.data.labels   = entries.map(([k]) => k);
+  protoChart.data.datasets[0].data = entries.map(([,v]) => v);
+  protoChart.update('none');
+}
 
 // ── WebSocket ──
 let ws, reconnectTimer;
@@ -695,19 +810,9 @@ function handleStats(d) {
     badge.className = `mode-badge ${d.mode === 'live' ? 'mode-live' : 'mode-demo'}`;
   }
 
-  if (d.protocol_distribution) renderProtos(d.protocol_distribution);
+  pushPpsPoint(d.packets_per_second ?? 0);
+  if (d.protocol_distribution) updateProtoChart(d.protocol_distribution);
   if (d.top_talkers)           renderTalkers(d.top_talkers);
-}
-
-function renderProtos(dist) {
-  const total = Object.values(dist).reduce((a, b) => a + b, 0) || 1;
-  const sorted = Object.entries(dist).sort((a, b) => b[1] - a[1]);
-  document.getElementById('protoList').innerHTML = sorted.map(([proto, cnt]) => `
-    <div class="proto-row">
-      <span style="min-width:42px;font-size:10px">${proto}</span>
-      <div class="proto-bar-wrap"><div class="proto-bar" style="width:${(cnt/total*100).toFixed(1)}%"></div></div>
-      <span class="proto-count">${cnt}</span>
-    </div>`).join('');
 }
 
 function renderTalkers(talkers) {
