@@ -140,6 +140,23 @@ async def _scan_task(target: str, scan_type: str) -> None:
 
     summary = await run_scan(target, scan_type, on_progress, on_open)
 
+    # Fingerprint the device and update the registry
+    if not summary.error and summary.open_ports:
+        try:
+            from scan.device_scanner import fingerprint, DEVICE_TYPES
+            from db import queries as _q
+            profile = await fingerprint(target, [r.port for r in summary.open_ports])
+            await _q.update_device_profile(profile)
+            info = DEVICE_TYPES.get(profile.device_type, DEVICE_TYPES["unknown"])
+            device_data = await _q.get_device(target)
+            if device_data:
+                await broadcast({
+                    "type": "device_updated",
+                    "data": {**device_data, "icon": info["icon"], "label": info["label"]},
+                })
+        except Exception as e:
+            logger.warning("Device fingerprinting failed: %s", e)
+
     await broadcast({
         "type": "scan_complete",
         "data": {
@@ -152,6 +169,29 @@ async def _scan_task(target: str, scan_type: str) -> None:
             "error": summary.error,
         },
     })
+
+
+@router.get("/devices")
+async def get_devices():
+    from scan.device_scanner import DEVICE_TYPES
+    devices = await queries.get_all_devices()
+    for d in devices:
+        info = DEVICE_TYPES.get(d.get("device_type", "unknown"), DEVICE_TYPES["unknown"])
+        d["icon"]  = info["icon"]
+        d["label"] = info["label"]
+    return devices
+
+
+@router.get("/devices/{ip}")
+async def get_device(ip: str):
+    from scan.device_scanner import DEVICE_TYPES
+    d = await queries.get_device(ip)
+    if not d:
+        raise HTTPException(status_code=404, detail="Device not found")
+    info = DEVICE_TYPES.get(d.get("device_type", "unknown"), DEVICE_TYPES["unknown"])
+    d["icon"]  = info["icon"]
+    d["label"] = info["label"]
+    return d
 
 
 @router.post("/scan/analyze")

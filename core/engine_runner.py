@@ -27,6 +27,7 @@ class EngineRunner:
         self._total_packets = 0
         self._total_bytes = 0
         self._total_alerts = 0
+        self._pending_ips: set = set()
         self._protocol_counts: Counter = Counter()
         self._src_ip_counts: Counter = Counter()
         self._dst_ip_set: set = set()
@@ -56,6 +57,7 @@ class EngineRunner:
 
         asyncio.create_task(self._process_loop(), name="packet-processor")
         asyncio.create_task(self._stats_loop(), name="stats-broadcaster")
+        asyncio.create_task(self._device_flush_loop(), name="device-flusher")
 
     def stop(self) -> None:
         self._running = False
@@ -82,6 +84,7 @@ class EngineRunner:
             except asyncio.TimeoutError:
                 continue
             self._update_stats(packet)
+            self._pending_ips.add(packet.src_ip)
             alerts = self._engine.process_packet(packet)
             for alert in alerts:
                 await self._handle_alert(alert)
@@ -130,6 +133,23 @@ class EngineRunner:
             d["ai_enabled"] = config.AI_ENABLED
             await connection_manager.broadcast(json.dumps({"type": "stats", "data": d}, default=str))
             self._active_flows.clear()
+
+    async def _device_flush_loop(self) -> None:
+        from db import queries
+        from scan.device_scanner import DEVICE_TYPES
+        while self._running:
+            await asyncio.sleep(15)
+            batch, self._pending_ips = self._pending_ips.copy(), set()
+            for ip in batch:
+                is_new = await queries.upsert_device_seen(ip)
+                if is_new:
+                    device = await queries.get_device(ip)
+                    if device:
+                        info = DEVICE_TYPES.get(device["device_type"], DEVICE_TYPES["unknown"])
+                        await connection_manager.broadcast(json.dumps({
+                            "type": "device_discovered",
+                            "data": {**device, "icon": info["icon"], "label": info["label"]},
+                        }, default=str))
 
     def _update_stats(self, packet: Packet) -> None:
         now = datetime.utcnow()

@@ -33,10 +33,27 @@ CREATE TABLE IF NOT EXISTS analyses (
 );
 """
 
+_CREATE_DEVICES = """
+CREATE TABLE IF NOT EXISTS devices (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip          TEXT NOT NULL UNIQUE,
+    hostname    TEXT,
+    device_type TEXT DEFAULT 'unknown',
+    os_hint     TEXT,
+    open_ports  TEXT DEFAULT '[]',
+    banner      TEXT,
+    risk_level  TEXT DEFAULT 'clean',
+    first_seen  TEXT NOT NULL,
+    last_seen   TEXT NOT NULL
+);
+"""
+
 _CREATE_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_severity  ON alerts(severity);
 CREATE INDEX IF NOT EXISTS idx_analyses_alert   ON analyses(alert_id);
+CREATE INDEX IF NOT EXISTS idx_devices_ip       ON devices(ip);
+CREATE INDEX IF NOT EXISTS idx_devices_risk     ON devices(risk_level);
 """
 
 
@@ -44,6 +61,7 @@ async def init_db() -> None:
     async with aiosqlite.connect(config.DB_PATH) as db:
         await db.execute(_CREATE_ALERTS)
         await db.execute(_CREATE_ANALYSES)
+        await db.execute(_CREATE_DEVICES)
         for stmt in _CREATE_INDEXES.strip().split(";"):
             stmt = stmt.strip()
             if stmt:

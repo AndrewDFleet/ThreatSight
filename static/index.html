@@ -214,6 +214,79 @@
   .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 12px; }
   .empty-icon { font-size: 28px; margin-bottom: 10px; }
 
+  /* ── Tabs ── */
+  .tab-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .tab {
+    padding: 9px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all .15s;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  /* ── Device Cards ── */
+  .device-list { overflow-y: auto; flex: 1; }
+  .device-list::-webkit-scrollbar { width: 4px; }
+  .device-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .device-card {
+    border-left: 3px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    transition: background .15s;
+    animation: slideIn .3s ease;
+  }
+  .device-card:hover { background: rgba(255,255,255,.03); }
+  .device-card.risk-flagged    { border-left-color: var(--red); }
+  .device-card.risk-suspicious { border-left-color: var(--orange); }
+  .device-card.risk-clean      { border-left-color: var(--green); }
+  .device-icon { font-size: 22px; line-height: 1; flex-shrink: 0; padding-top: 1px; }
+  .device-body { flex: 1; min-width: 0; }
+  .device-row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+  .device-ip { font-family: monospace; font-size: 13px; font-weight: 700; }
+  .device-label { font-size: 11px; color: var(--muted); }
+  .device-hostname { font-size: 10px; color: var(--muted); margin-bottom: 4px; font-style: italic; }
+  .device-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .device-ports { display: flex; gap: 4px; flex-wrap: wrap; }
+  .port-tag {
+    font-size: 9px; font-family: monospace;
+    padding: 2px 5px;
+    background: var(--border);
+    border-radius: 3px;
+    color: var(--muted);
+  }
+  .port-tag.risky { background: rgba(239,68,68,.15); color: var(--red); }
+  .risk-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .risk-dot.flagged    { background: var(--red); }
+  .risk-dot.suspicious { background: var(--orange); }
+  .risk-dot.clean      { background: var(--green); }
+  .device-scan-btn {
+    padding: 3px 8px;
+    font-size: 10px;
+    font-family: inherit;
+    font-weight: 600;
+    background: rgba(59,130,246,.1);
+    border: 1px solid rgba(59,130,246,.3);
+    border-radius: 3px;
+    color: var(--blue);
+    cursor: pointer;
+    flex-shrink: 0;
+    align-self: center;
+  }
+  .device-scan-btn:hover { background: rgba(59,130,246,.25); }
+  .os-hint { font-size: 10px; color: var(--muted); }
+
   /* ── Modal Backdrop ── */
   .modal-backdrop {
     display: none;
@@ -409,15 +482,38 @@
 
 <div class="main">
   <div class="panel">
-    <div class="panel-header">
-      <span>Live Alert Feed</span>
-      <span id="alertCount" style="color:var(--text)">0 alerts</span>
+    <div class="tab-bar">
+      <div class="tab active" id="tab-alerts" onclick="switchTab('alerts')">🔔 ALERTS <span id="alertBadge" style="margin-left:4px;opacity:.6">0</span></div>
+      <div class="tab" id="tab-devices" onclick="switchTab('devices')">💻 DEVICES <span id="deviceBadge" style="margin-left:4px;opacity:.6">0</span></div>
     </div>
-    <div class="alert-list" id="alertList">
-      <div class="empty-state">
-        <div class="empty-icon">🔍</div>
-        <div>Monitoring network traffic…</div>
-        <div style="margin-top:6px;font-size:10px">Alerts will appear here when threats are detected</div>
+
+    <!-- Alert tab -->
+    <div id="view-alerts" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+      <div class="panel-header">
+        <span>Live Alert Feed</span>
+        <span id="alertCount" style="color:var(--text)">0 alerts</span>
+      </div>
+      <div class="alert-list" id="alertList">
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div>Monitoring network traffic…</div>
+          <div style="margin-top:6px;font-size:10px">Alerts will appear here when threats are detected</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Devices tab -->
+    <div id="view-devices" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div class="panel-header">
+        <span>Discovered Devices</span>
+        <span id="deviceCount" style="color:var(--text)">0 devices</span>
+      </div>
+      <div class="device-list" id="deviceList">
+        <div class="empty-state">
+          <div class="empty-icon">💻</div>
+          <div>No devices discovered yet</div>
+          <div style="margin-top:6px;font-size:10px">Devices appear as traffic is detected or scans are run</div>
+        </div>
       </div>
     </div>
   </div>
@@ -725,9 +821,11 @@ function connect() {
     if (msg.type === 'alert')         handleAlert(msg.data);
     if (msg.type === 'stats')         handleStats(msg.data);
     if (msg.type === 'analysis')      handleAnalysis(msg.data);
-    if (msg.type === 'scan_progress') handleScanProgress(msg.data);
-    if (msg.type === 'scan_result')   handleScanResult(msg.data);
-    if (msg.type === 'scan_complete') handleScanComplete(msg.data);
+    if (msg.type === 'scan_progress')    handleScanProgress(msg.data);
+    if (msg.type === 'scan_result')      handleScanResult(msg.data);
+    if (msg.type === 'scan_complete')    handleScanComplete(msg.data);
+    if (msg.type === 'device_discovered') handleDeviceDiscovered(msg.data);
+    if (msg.type === 'device_updated')    handleDeviceUpdated(msg.data);
   };
 }
 
@@ -837,6 +935,88 @@ function fmt_uptime(s) {
   const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
   const sec = String(s % 60).padStart(2, '0');
   return `${h}:${m}:${sec}`;
+}
+
+// ── Tab switching ──
+function switchTab(tab) {
+  document.getElementById('view-alerts').style.display  = tab === 'alerts'  ? 'flex' : 'none';
+  document.getElementById('view-devices').style.display = tab === 'devices' ? 'flex' : 'none';
+  document.getElementById('tab-alerts').classList.toggle('active',  tab === 'alerts');
+  document.getElementById('tab-devices').classList.toggle('active', tab === 'devices');
+}
+
+// ── Device registry ──
+const deviceStore = new Map(); // ip → device data
+let deviceCount = 0;
+const HIGH_RISK_PORTS = new Set([23, 445, 3389, 6379, 27017, 9200, 2375]);
+
+function upsertDevice(d) {
+  const isNew = !deviceStore.has(d.ip);
+  deviceStore.set(d.ip, d);
+
+  if (isNew) {
+    deviceCount++;
+    document.getElementById('deviceBadge').textContent = deviceCount;
+    document.getElementById('deviceCount').textContent = `${deviceCount} device${deviceCount !== 1 ? 's' : ''}`;
+    const empty = document.getElementById('deviceList').querySelector('.empty-state');
+    if (empty) empty.remove();
+  }
+
+  const existing = document.getElementById(`device-${d.ip.replace(/\./g, '-')}`);
+  const el = renderDeviceCard(d);
+  if (existing) {
+    existing.replaceWith(el);
+  } else {
+    document.getElementById('deviceList').insertBefore(el, document.getElementById('deviceList').firstChild);
+  }
+}
+
+function renderDeviceCard(d) {
+  const el = document.createElement('div');
+  const risk = d.risk_level || 'clean';
+  el.className = `device-card risk-${risk}`;
+  el.id = `device-${d.ip.replace(/\./g, '-')}`;
+
+  const ports = (d.open_ports || []).slice(0, 8).map(p => {
+    const risky = HIGH_RISK_PORTS.has(p);
+    return `<span class="port-tag${risky ? ' risky' : ''}">${p}</span>`;
+  }).join('');
+
+  const riskColors = { flagged: 'var(--red)', suspicious: 'var(--orange)', clean: 'var(--green)' };
+  const riskLabels = { flagged: 'HIGH RISK', suspicious: 'SUSPICIOUS', clean: 'CLEAN' };
+
+  el.innerHTML = `
+    <div class="device-icon">${d.icon || '❓'}</div>
+    <div class="device-body">
+      <div class="device-row1">
+        <span class="device-ip">${d.ip}</span>
+        <span class="risk-dot ${risk}"></span>
+        <span style="font-size:9px;font-weight:700;color:${riskColors[risk]}">${riskLabels[risk]}</span>
+      </div>
+      <div class="device-label">${d.label || 'Unknown Device'}</div>
+      ${d.hostname ? `<div class="device-hostname">${d.hostname}</div>` : ''}
+      ${d.os_hint  ? `<div class="os-hint">OS: ${d.os_hint}</div>` : ''}
+      ${ports ? `<div class="device-ports" style="margin-top:5px">${ports}</div>` : ''}
+    </div>
+    <button class="device-scan-btn" onclick="scanDevice('${d.ip}')">⚡ Scan</button>`;
+  return el;
+}
+
+function scanDevice(ip) {
+  document.getElementById('scanTarget').value = ip;
+  openScanModal();
+}
+
+function handleDeviceDiscovered(d) { upsertDevice(d); }
+function handleDeviceUpdated(d)    { upsertDevice(d); }
+
+// Load existing devices on page load
+async function loadDevices() {
+  try {
+    const r = await fetch('/api/devices');
+    const devices = await r.json();
+    devices.forEach(d => upsertDevice(d));
+  } catch(e) { console.error('loadDevices:', e); }
 }
 
 // ── Scan Modal ──
@@ -1097,6 +1277,7 @@ async function acknowledgeAlert() {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 connect();
+loadDevices();
 </script>
 </body>
 </html>
