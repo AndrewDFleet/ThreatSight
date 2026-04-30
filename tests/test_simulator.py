@@ -3,8 +3,8 @@ Test script for traffic simulator
 Demonstrates different traffic patterns and data model usage
 """
 
-import sys
-sys.path.insert(0, '/home/claude/network_threat_viz')
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from traffic_simulator import TrafficSimulator
 from models import Protocol, AlertType
